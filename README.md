@@ -2,22 +2,29 @@
 
 Browser-based element selection, click automation, and screenshotting tool for agentic web app improvement.
 
-webctx gives AI agents and developers a way to **see**, **select**, and **interact** with web pages — then extract structured context (selectors, bounding boxes, HTML snippets) that can feed back into code generation and debugging workflows.
+webctx gives AI agents and developers a way to **see**, **select**, and **interact** with web pages — then extract structured context (selectors, bounding boxes, HTML snippets, framework metadata) that can feed back into code generation and debugging workflows.
 
 ## Features
 
-- **Interactive browser** — Electron window with a target page view and a toolbar for navigation
-- **Element picker** — Hover to highlight, click to select, shift+click for multi-select. Selected elements get persistent overlays with selector labels.
-- **Selector generation** — Produces unique CSS selectors (id > data-testid > unique class > nth-child) and XPath for every selected element
-- **Context extraction** — For each selection: CSS selector, XPath, tag name, text content, all attributes, bounding box, and an HTML snippet
+- **Interactive browser** — Electron app with BaseWindow + WebContentsView architecture, dark Catppuccin Mocha theme
+- **Element picker** — Hover to highlight, click to select, shift+click for multi-select. Persistent green overlays with selector labels.
+- **Framework metadata** — Auto-detects React, Vue, and Svelte components. Extracts source location, component chain, and serializable props.
+- **Context sidebar** — Right panel showing a chronological list of selected elements and screenshots. Hover an item to highlight it on the page. "To Shell" button generates a markdown prompt and pastes it into the terminal.
+- **Embedded terminal** — xterm.js + node-pty panel for running commands without leaving the browser
+- **Embedded DevTools** — Chrome DevTools panel toggled from the toolbar
+- **Favorites bar** — Bookmarkable pages with favicon, persisted to disk
+- **Selector generation** — Unique CSS selectors (id > data-testid > unique class > nth-child) and XPath for every selected element
 - **Screenshots** — Viewport, full-page, or single-element capture as PNG
-- **MCP server** — 8 tools exposed over stdio for any MCP-compatible agent or IDE
-- **CLI** — Headless commands for scripting and CI pipelines
+- **Console log capture** — Ring buffer (1000 entries), filterable by level
+- **Network traffic capture** — Via Chrome DevTools Protocol, tracks request/response/failure with duration
+- **Context HTTP server** — `http://localhost:24842` serving `/context`, `/screenshot/:id`, `/console`, `/network` with CORS
+- **MCP server** — 10 tools over stdio for any MCP-compatible agent or IDE
+- **CLI** — Commands for scripting and CI pipelines
 
 ## Installation
 
 ```bash
-git clone <repo-url> && cd webctx
+git clone https://github.com/gpue/webctx.git && cd webctx
 npm install
 npm run build
 ```
@@ -29,40 +36,42 @@ Requires **Node.js >= 20**.
 ### Interactive browser
 
 ```bash
-# Launch with a URL
 npx webctx open https://example.com
-
-# Or after building
-npm start -- https://example.com
 ```
 
 **Toolbar controls:**
 
 | Button | Action |
 |--------|--------|
-| `◀` `▶` | Back / Forward |
-| `↻` | Reload |
-| URL bar | Type a URL and press Enter to navigate |
-| `☷` | Toggle element picker (blue = active) |
-| Badge | Shows count of selected elements |
-| `✕` | Clear all selections |
-| `☑` | Take a screenshot |
+| ← → | Back / Forward |
+| ↻ | Reload |
+| URL bar | Type a URL or search term, press Enter |
+| ☆ | Bookmark current page |
+| Picker | Toggle element picker (blue = active, opens sidebar) |
+| Terminal | Toggle embedded terminal panel |
+| Settings | Toggle Chrome DevTools panel |
 
 **Picker interaction:**
 
 | Action | Effect |
 |--------|--------|
 | Hover | Blue highlight overlay + tooltip showing `tag#id.class` |
-| Click | Select element (replaces previous selection) |
+| Click | Select element (added to sidebar context list) |
 | Shift+Click | Add element to multi-selection |
 | Shift+Click (selected) | Deselect element |
 | Escape | Dismiss picker |
 
-Selected elements are shown with a green overlay and a label displaying their CSS selector.
+**Sidebar actions:**
+
+| Button | Action |
+|--------|--------|
+| Screenshot | Capture viewport screenshot, added to context list |
+| To Shell | Generate markdown prompt from context and paste into terminal |
+| Clear All | Remove all context items |
+| Hover item | Blue highlight overlay on the target page |
+| × on item | Remove individual item |
 
 ### CLI
-
-All commands work headlessly — no visible window needed.
 
 ```bash
 # Take a screenshot
@@ -78,17 +87,19 @@ npx webctx type https://example.com "#search" "query text"
 
 # Dump all interactive elements as JSON
 npx webctx context https://example.com
-```
 
-The `context` command outputs JSON with all interactive elements (links, buttons, inputs, etc.) including their selectors, text content, attributes, and bounding boxes — ready to be consumed by an agent.
+# View console logs
+npx webctx logs https://example.com --level error --limit 50
+
+# View network traffic
+npx webctx network https://example.com --limit 20
+```
 
 ### MCP server
 
-Start the stdio-based MCP server for integration with IDEs and agents:
-
 ```bash
 npx webctx serve
-npx webctx serve --url https://example.com  # pre-navigate
+npx webctx serve --url https://example.com
 ```
 
 **Available tools:**
@@ -103,8 +114,10 @@ npx webctx serve --url https://example.com  # pre-navigate
 | `webctx_get_context` | Get current page state and all selected elements |
 | `webctx_list_elements` | List all interactive elements on the page |
 | `webctx_pick` | Enable/disable the interactive element picker |
+| `webctx_console_logs` | Get captured console log entries |
+| `webctx_network_log` | Get captured network traffic entries |
 
-#### MCP configuration example
+#### MCP configuration
 
 ```json
 {
@@ -117,9 +130,18 @@ npx webctx serve --url https://example.com  # pre-navigate
 }
 ```
 
-## Context format
+### Context HTTP server
 
-When an element is selected (via picker, CLI, or MCP), the returned context looks like this:
+Runs automatically on `http://localhost:24842` when the Electron app is open.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /context` | Current page context with all selected elements |
+| `GET /screenshot/:id` | Retrieve a screenshot by ID |
+| `GET /console` | Console log entries (`?level=error&limit=50`) |
+| `GET /network` | Network traffic entries (`?limit=20`) |
+
+## Context format
 
 ```json
 {
@@ -127,21 +149,35 @@ When an element is selected (via picker, CLI, or MCP), the returned context look
   "xpath": "/html/body[1]/main[1]/form[1]/button[1]",
   "tagName": "button",
   "textContent": "Log In",
-  "attributes": {
-    "type": "submit",
-    "class": "btn btn-primary"
-  },
-  "boundingBox": {
-    "x": 120,
-    "y": 340,
-    "width": 80,
-    "height": 36
-  },
-  "htmlSnippet": "<button type=\"submit\" class=\"btn btn-primary\">Log In</button>"
+  "attributes": { "type": "submit", "class": "btn btn-primary" },
+  "boundingBox": { "x": 120, "y": 340, "width": 80, "height": 36 },
+  "htmlSnippet": "<button type=\"submit\" class=\"btn btn-primary\">Log In</button>",
+  "framework": {
+    "name": "react",
+    "componentChain": ["LoginForm", "Button"],
+    "sourceLocation": "src/components/LoginForm.tsx:42",
+    "props": { "variant": "primary", "disabled": false }
+  }
 }
 ```
 
-The full page context (`webctx_get_context` / `webctx context`) includes the URL, title, timestamp, and an array of all selected elements in this format.
+The `framework` field is only present when React, Vue, or Svelte is detected on the page.
+
+## Layout
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                         toolbar                           │
+├────────────────────────────────────────────────────────────┤
+│                       favorites bar                       │
+├──────────────────────────┬──────────────┬────────────────┤
+│                          │   context    │                │
+│      target page         │  (sidebar)   │   terminal     │
+│                          │  resizable ↔ │  resizable ↔   │
+│──────────────────────────│              │                │
+│      devtools (optional) │              │                │
+└──────────────────────────┴──────────────┴────────────────┘
+```
 
 ## Development
 
@@ -158,40 +194,14 @@ npm run quality      # Run typecheck + lint + tests
 npm run deadcode     # Detect unused code with Knip
 ```
 
-### Architecture
-
-```
-electron/
-  main.ts             Electron main process, IPC handlers, window management
-  toolbar.html        Toolbar UI (URL bar, navigation, picker toggle)
-  toolbarPreload.ts   contextBridge for toolbar <-> main IPC
-  viewPreload.ts      contextBridge for target page <-> main IPC
-  picker.ts           Element picker (injected IIFE: hover, select, overlay)
-src/
-  core/
-    types.ts          Shared type definitions (ElementContext, PageContext, etc.)
-    state.ts          In-memory state manager for selections and page info
-    selector.ts       CSS selector and XPath generation from DOM elements
-    screenshot.ts     Screenshot capture via Electron webContents
-    backend.ts        BrowserBackend adapter bridging Electron to MCP/CLI
-  mcp/
-    server.ts         MCP server with 8 tools, stdio transport
-  cli/
-    index.ts          CLI entry point (commander)
-test/
-  unit/               Unit tests (state, selector, screenshot, MCP server)
-  e2e/                E2E tests (Playwright with Electron)
-  fixtures/           Static HTML pages for deterministic testing
-```
-
 ### Quality tools
 
 | Tool | Purpose |
 |------|---------|
-| [Vitest](https://vitest.dev) | Unit tests |
+| [Vitest](https://vitest.dev) | Unit tests (38 tests, 80% coverage threshold) |
 | [Playwright](https://playwright.dev) | E2E tests via `_electron` API |
 | [Biome](https://biomejs.dev) | Linting and formatting |
-| TypeScript `--noEmit` | Type checking |
+| TypeScript `--noEmit` | Strict mode type checking |
 | [Lefthook](https://github.com/evilmartians/lefthook) | Git hooks (pre-commit: biome + typecheck, pre-push: tests) |
 | [Knip](https://knip.dev) | Dead code and unused dependency detection |
 
