@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>webctx test fixture — simple</title>
+  <style>
+    .highlight { background: yellow; }
+    .card { border: 1px solid #ccc; padding: 16px; margin: 8px; }
+    nav { background: #f0f0f0; padding: 8px; }
+  </style>
+</head>
+<body>
+  <nav id="main-nav">
+    <a href="/home" class="nav-link">Home</a>
+    <a href="/about" class="nav-link">About</a>
+    <a href="/contact" class="nav-link active">Contact</a>
+  </nav>
+
+  <main>
+    <h1 id="page-title">Test Page</h1>
+    <p class="description">A simple test fixture for webctx selector generation.</p>
+
+    <form id="login-form">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" placeholder="Enter username">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" placeholder="Enter password">
+      <button type="submit" class="btn btn-primary">Log In</button>
+      <button type="reset" class="btn btn-secondary">Reset</button>
+    </form>
+
+    <div class="card" data-testid="card-1">
+      <h2>Card One</h2>
+      <p>First card content.</p>
+      <button class="btn">Action</button>
+    </div>
+
+    <div class="card" data-testid="card-2">
+      <h2>Card Two</h2>
+      <p>Second card content.</p>
+      <button class="btn">Action</button>
+    </div>
+
+    <ul id="item-list">
+      <li class="item">Item 1</li>
+      <li class="item">Item 2</li>
+      <li class="item highlight">Item 3</li>
+      <li class="item">Item 4</li>
+    </ul>
+  </main>
+</body>
+</html>

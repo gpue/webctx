@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>webctx test fixture — complex</title>
+</head>
+<body>
+  <!-- Deeply nested structure -->
+  <div class="app">
+    <div class="layout">
+      <div class="sidebar">
+        <div class="menu">
+          <div class="menu-item">
+            <span class="icon">★</span>
+            <span class="label">Dashboard</span>
+          </div>
+          <div class="menu-item">
+            <span class="icon">★</span>
+            <span class="label">Settings</span>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        <!-- Elements without IDs or unique classes -->
+        <div class="row">
+          <div class="col"><span>A</span></div>
+          <div class="col"><span>B</span></div>
+          <div class="col"><span>C</span></div>
+        </div>
+        <div class="row">
+          <div class="col"><span>D</span></div>
+          <div class="col"><span>E</span></div>
+          <div class="col"><span>F</span></div>
+        </div>
+
+        <!-- Dynamic-looking IDs (should still work) -->
+        <button id="btn-abc123-xyz">Dynamic ID Button</button>
+
+        <!-- Elements with special characters in attributes -->
+        <div data-value="foo&bar" class="special">Special chars</div>
+        <div data-value="with spaces" class="special">Spaces in attr</div>
+
+        <!-- Table structure -->
+        <table id="data-table">
+          <thead>
+            <tr><th>Name</th><th>Value</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Row 1</td><td>100</td></tr>
+            <tr><td>Row 2</td><td>200</td></tr>
+            <tr><td>Row 3</td><td>300</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Iframe (edge case) -->
+        <iframe id="nested-frame" srcdoc="<p>Nested content</p>" title="Nested frame"></iframe>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
