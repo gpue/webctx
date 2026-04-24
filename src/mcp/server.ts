@@ -16,6 +16,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import type { StateManager } from "../core/state.js";
+import type { ConsoleEntry, NetworkEntry } from "../core/types.js";
 
 /** Abstraction over the browser backend so the MCP server is testable. */
 export interface BrowserBackend {
@@ -32,6 +33,16 @@ export interface BrowserBackend {
 	listInteractiveElements(): Promise<unknown[]>;
 	enablePicker(): Promise<void>;
 	disablePicker(): Promise<void>;
+	getConsoleLogs(options?: {
+		level?: string;
+		limit?: number;
+		clear?: boolean;
+	}): Promise<ConsoleEntry[]>;
+	getNetworkLog(options?: {
+		limit?: number;
+		filter?: string;
+		clear?: boolean;
+	}): Promise<NetworkEntry[]>;
 }
 
 export function createMcpServer(backend: BrowserBackend): McpServer {
@@ -202,6 +213,52 @@ export function createMcpServer(backend: BrowserBackend): McpServer {
 					{
 						type: "text" as const,
 						text: `Picker ${enabled ? "enabled" : "disabled"}`,
+					},
+				],
+			};
+		},
+	);
+
+	// ── console_logs ────────────────────────────────────────────────
+
+	server.tool(
+		"webctx_console_logs",
+		"Get recent console log entries from the target page",
+		{
+			level: z.string().optional().describe("Filter by level: log, warn, error, info, debug"),
+			limit: z.number().optional().describe("Max number of entries to return"),
+			clear: z.boolean().optional().describe("Clear the log buffer after reading"),
+		},
+		async ({ level, limit, clear }) => {
+			const entries = await backend.getConsoleLogs({ level, limit, clear });
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: JSON.stringify(entries, null, 2),
+					},
+				],
+			};
+		},
+	);
+
+	// ── network_log ─────────────────────────────────────────────────
+
+	server.tool(
+		"webctx_network_log",
+		"Get recent network requests from the target page",
+		{
+			filter: z.string().optional().describe("Filter by URL or MIME type substring"),
+			limit: z.number().optional().describe("Max number of entries to return"),
+			clear: z.boolean().optional().describe("Clear the log buffer after reading"),
+		},
+		async ({ filter, limit, clear }) => {
+			const entries = await backend.getNetworkLog({ filter, limit, clear });
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: JSON.stringify(entries, null, 2),
 					},
 				],
 			};

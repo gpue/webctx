@@ -9,7 +9,7 @@
 	},
 	"scripts": {
 		"dev": "electron .",
-		"build": "tsup && cp electron/toolbar.html dist/electron/toolbar.html",
+		"build": "tsup && cp electron/toolbar.html dist/electron/toolbar.html && cp electron/sidebar.html dist/electron/sidebar.html && cp electron/terminal.html dist/electron/terminal.html && cp node_modules/@xterm/xterm/css/xterm.css dist/electron/xterm.css && cp node_modules/@xterm/xterm/lib/xterm.js dist/electron/xterm.js && cp node_modules/@xterm/addon-fit/lib/addon-fit.js dist/electron/addon-fit.js",
 		"start": "electron dist/electron/main.cjs",
 		"serve": "node dist/mcp/server.js",
 		"test": "vitest run",
@@ -21,11 +21,16 @@
 		"typecheck": "tsc --noEmit",
 		"quality": "npm run typecheck && npm run lint && npm run test",
 		"deadcode": "knip",
-		"prepare": "lefthook install"
+		"prepare": "lefthook install",
+		"postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null; true"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.12.1",
-		"commander": "^13.1.0"
+		"@xterm/addon-fit": "^0.11.0",
+		"@xterm/xterm": "^6.0.0",
+		"commander": "^13.1.0",
+		"lucide-static": "^1.11.0",
+		"node-pty": "^1.1.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.0.0",

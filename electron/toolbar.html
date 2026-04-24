@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' https: data:">
   <title>webctx</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -10,9 +10,8 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #1e1e2e;
       color: #cdd6f4;
-      height: 52px;
-      overflow: hidden;
       user-select: none;
+      overflow: hidden;
     }
     .toolbar {
       display: flex;
@@ -22,7 +21,7 @@
       height: 52px;
       -webkit-app-region: drag;
     }
-    .toolbar button, .toolbar input, .toolbar .app-icon, .toolbar .selection-badge {
+    .toolbar button, .toolbar input, .toolbar .app-icon {
       -webkit-app-region: no-drag;
     }
     .toolbar button {
@@ -44,6 +43,7 @@
     .toolbar button:hover { background: #45475a; }
     .toolbar button:active { background: #585b70; }
     .toolbar button.active { background: #89b4fa; color: #1e1e2e; }
+    .toolbar button.hidden { display: none; }
     .url-bar {
       flex: 1;
       height: 32px;
@@ -63,33 +63,23 @@
       font-weight: 600;
       letter-spacing: 0.5px;
     }
-    .selection-badge {
-      background: #a6e3a1;
-      color: #1e1e2e;
-      border-radius: 10px;
-      padding: 2px 8px;
-      font-size: 11px;
-      font-weight: 600;
-      min-width: 20px;
-      text-align: center;
-      display: none;
-    }
-    .selection-badge.visible { display: inline-block; }
+
     .app-icon {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
-      height: 28px;
+      width: 32px;
+      height: 32px;
       flex-shrink: 0;
     }
-    .app-icon svg { width: 22px; height: 22px; }
-    /* Tooltips — shown ABOVE controls so BrowserView doesn't cover them */
+    .app-icon svg { width: 24px; height: 24px; }
+
+    /* Tooltips — shown BELOW controls into the favorites bar space */
     [data-tooltip] { position: relative; }
     [data-tooltip]::after {
       content: attr(data-tooltip);
       position: absolute;
-      top: -30px;
+      top: calc(100% + 4px);
       left: 50%;
       transform: translateX(-50%);
       background: #11111b;
@@ -101,11 +91,61 @@
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.15s;
-      z-index: 100;
+      z-index: 1000;
       border: 1px solid #45475a;
     }
     [data-tooltip]:hover::after { opacity: 1; }
-    .url-bar[data-tooltip]::after { top: -26px; }
+
+    /* Favorites bar — always visible */
+    .favorites-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 12px;
+      height: 28px;
+      background: #181825;
+      border-top: 1px solid #313244;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .favorites-bar::-webkit-scrollbar { height: 0; }
+    .fav-empty {
+      font-size: 11px;
+      color: #585b70;
+      font-style: italic;
+    }
+    .fav-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #bac2de;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      -webkit-app-region: no-drag;
+    }
+    .fav-item:hover { background: #313244; }
+    .fav-item img {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+    }
+    .fav-item .fav-placeholder {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      background: #45475a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      color: #cdd6f4;
+    }
+    #btn-fav.starred { color: #f9e2af; }
   </style>
 </head>
 <body>
@@ -118,22 +158,100 @@
         <path d="M16 12l-4 4"/>
       </svg>
     </span>
-    <button id="btn-back" data-tooltip="Back">&#9664;</button>
-    <button id="btn-forward" data-tooltip="Forward">&#9654;</button>
-    <button id="btn-reload" data-tooltip="Reload">&#8635;</button>
-    <input type="text" class="url-bar" id="url-bar" placeholder="Enter URL or search..." spellcheck="false" data-tooltip="URL or search query">
+    <button id="btn-back" data-tooltip="Back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg></button>
+    <button id="btn-forward" data-tooltip="Forward"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+    <button id="btn-reload" data-tooltip="Reload"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    <input type="text" class="url-bar" id="url-bar" placeholder="Enter URL or search..." spellcheck="false">
     <button id="btn-go" data-tooltip="Navigate">Go</button>
-    <button id="btn-picker" data-tooltip="Element picker">&#9783;</button>
-    <span class="selection-badge" id="selection-badge" data-tooltip="Selected elements">0</span>
-    <button id="btn-clear" data-tooltip="Clear selection">&#10005;</button>
-    <button id="btn-screenshot" data-tooltip="Screenshot">&#9745;</button>
+    <button id="btn-fav" data-tooltip="Bookmark page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
+    <button id="btn-picker" data-tooltip="Select elements"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4.1 12 6"/><path d="m5.1 8-2.9-.8"/><path d="m6 12-1.9 2"/><path d="M7.2 2.2 8 5.1"/><path d="M9.037 9.69a.498.498 0 0 1 .653-.653l11 4.5a.5.5 0 0 1-.074.949l-4.349 1.041a1 1 0 0 0-.74.739l-1.04 4.35a.5.5 0 0 1-.95.074z"/></svg></button>
+    <button id="btn-terminal" data-tooltip="Terminal"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19h8"/><path d="m4 17 6-6-6-6"/></svg></button>
+    <button id="btn-devtools" data-tooltip="DevTools"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></button>
+  </div>
+  <div class="favorites-bar" id="favorites-bar">
+    <span class="fav-empty">No bookmarks yet — click the star to add one</span>
   </div>
 
   <script>
     const urlBar = document.getElementById('url-bar');
     const btnPicker = document.getElementById('btn-picker');
-    const badge = document.getElementById('selection-badge');
+    const btnFav = document.getElementById('btn-fav');
+    const favBar = document.getElementById('favorites-bar');
 
+    // ── Favorites (persisted via IPC) ──
+    let favorites = []; // [{url, title}]
+    let currentUrl = '';
+    let currentTitle = '';
+
+    function getFavicon(url) {
+      try {
+        const u = new URL(url);
+        return u.origin + '/favicon.ico';
+      } catch { return ''; }
+    }
+
+    function renderFavorites() {
+      favBar.innerHTML = '';
+      if (favorites.length === 0) {
+        favBar.innerHTML = '<span class="fav-empty">No bookmarks yet \u2014 click the star to add one</span>';
+        return;
+      }
+      for (const fav of favorites) {
+        const el = document.createElement('div');
+        el.className = 'fav-item';
+        const favicon = getFavicon(fav.url);
+        let label;
+        try { label = fav.title || new URL(fav.url).hostname; } catch { label = fav.url; }
+        const initial = label[0] ? label[0].toUpperCase() : '?';
+        el.innerHTML = favicon
+          ? `<img src="${favicon}" onerror="this.outerHTML='<span class=\\'fav-placeholder\\'>${initial}</span>'">`
+          : `<span class="fav-placeholder">${initial}</span>`;
+        el.innerHTML += `<span>${label}</span>`;
+        el.addEventListener('click', () => window.webctxToolbar.navigate(fav.url));
+        el.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          if (confirm('Remove bookmark?')) {
+            favorites = favorites.filter(f => f.url !== fav.url);
+            saveFavorites();
+            renderFavorites();
+            updateStarButton();
+          }
+        });
+        favBar.appendChild(el);
+      }
+    }
+
+    function updateStarButton() {
+      const isStarred = favorites.some(f => f.url === currentUrl);
+      const svg = btnFav.querySelector('svg path');
+      if (svg) svg.setAttribute('fill', isStarred ? 'currentColor' : 'none');
+      btnFav.classList.toggle('starred', isStarred);
+    }
+
+    function saveFavorites() {
+      window.webctxToolbar.saveFavorites(favorites);
+    }
+
+    async function loadFavorites() {
+      favorites = await window.webctxToolbar.loadFavorites() || [];
+      renderFavorites();
+      updateStarButton();
+    }
+
+    btnFav.addEventListener('click', () => {
+      if (!currentUrl) return;
+      const idx = favorites.findIndex(f => f.url === currentUrl);
+      if (idx >= 0) {
+        favorites.splice(idx, 1);
+      } else {
+        favorites.push({ url: currentUrl, title: currentTitle || currentUrl });
+      }
+      saveFavorites();
+      renderFavorites();
+      updateStarButton();
+    });
+
+    // ── Navigation ──
     function doNavigate() {
       const val = urlBar.value.trim();
       if (val) {
@@ -142,7 +260,6 @@
       }
     }
 
-    // Both keydown and keyup for maximum compatibility with Electron drag regions
     urlBar.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -155,20 +272,42 @@
     document.getElementById('btn-back').addEventListener('click', () => window.webctxToolbar.goBack());
     document.getElementById('btn-forward').addEventListener('click', () => window.webctxToolbar.goForward());
     document.getElementById('btn-reload').addEventListener('click', () => window.webctxToolbar.reload());
-    document.getElementById('btn-clear').addEventListener('click', () => window.webctxToolbar.clearSelection());
-    document.getElementById('btn-screenshot').addEventListener('click', () => window.webctxToolbar.screenshot({}));
 
     btnPicker.addEventListener('click', async () => {
       const active = await window.webctxToolbar.togglePicker();
       btnPicker.classList.toggle('active', active);
     });
 
-    window.webctxToolbar.onUrlChanged((url) => { urlBar.value = url; });
-    window.webctxToolbar.onSelectionUpdated((ctx) => {
-      const count = ctx.selectedElements.length;
-      badge.textContent = count;
-      badge.classList.toggle('visible', count > 0);
+    const btnDevtools = document.getElementById('btn-devtools');
+    btnDevtools.addEventListener('click', async () => {
+      const active = await window.webctxToolbar.openDevTools();
+      btnDevtools.classList.toggle('active', active);
     });
+
+    const btnTerminal = document.getElementById('btn-terminal');
+    btnTerminal.addEventListener('click', async () => {
+      const active = await window.webctxToolbar.toggleTerminal();
+      btnTerminal.classList.toggle('active', active);
+    });
+
+    window.webctxToolbar.onUrlChanged((url, title) => {
+      urlBar.value = url;
+      currentUrl = url;
+      currentTitle = title || '';
+      updateStarButton();
+    });
+
+    window.webctxToolbar.onDevToolsToggled((active) => {
+      btnDevtools.classList.toggle('active', active);
+    });
+
+    window.webctxToolbar.onTerminalToggled((active) => {
+      btnTerminal.classList.toggle('active', active);
+    });
+
+
+    // Load favorites on startup
+    loadFavorites();
   </script>
 </body>
 </html>

@@ -5,7 +5,7 @@
 
 import type { BrowserBackend } from "../mcp/server.js";
 import type { StateManager } from "./state.js";
-import type { ScreenshotOptions } from "./types.js";
+import type { ConsoleEntry, NetworkEntry, ScreenshotOptions } from "./types.js";
 
 /**
  * Create an Electron-backed browser backend.
@@ -65,6 +65,22 @@ export async function createElectronBackend(
 
 		async disablePicker(): Promise<void> {
 			await electronMain.disablePicker();
+		},
+
+		async getConsoleLogs(options?: {
+			level?: string;
+			limit?: number;
+			clear?: boolean;
+		}): Promise<ConsoleEntry[]> {
+			return electronMain.getConsoleLogs(options);
+		},
+
+		async getNetworkLog(options?: {
+			limit?: number;
+			filter?: string;
+			clear?: boolean;
+		}): Promise<NetworkEntry[]> {
+			return electronMain.getNetworkLog(options);
 		},
 	};
 }

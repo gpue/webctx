@@ -131,6 +131,50 @@ program
 		}
 	});
 
+program
+	.command("logs <url>")
+	.description("Dump console logs from a page")
+	.option("--level <level>", "Filter by level (log, warn, error, info, debug)")
+	.option("--limit <n>", "Max entries to return", "100")
+	.action(async (url: string, opts: { level?: string; limit: string }) => {
+		try {
+			const result = await runHeadless(url, async (backend) => {
+				// Wait briefly for page to emit console messages
+				await new Promise((resolve) => setTimeout(resolve, 2000));
+				return backend.getConsoleLogs({
+					level: opts.level,
+					limit: Number(opts.limit),
+				});
+			});
+			console.log(JSON.stringify(result, null, 2));
+		} catch (err) {
+			console.error("Logs failed:", err);
+			process.exitCode = 1;
+		}
+	});
+
+program
+	.command("network <url>")
+	.description("Dump network traffic from a page")
+	.option("--filter <pattern>", "Filter by URL or MIME type")
+	.option("--limit <n>", "Max entries to return", "100")
+	.action(async (url: string, opts: { filter?: string; limit: string }) => {
+		try {
+			const result = await runHeadless(url, async (backend) => {
+				// Wait briefly for network requests to complete
+				await new Promise((resolve) => setTimeout(resolve, 3000));
+				return backend.getNetworkLog({
+					filter: opts.filter,
+					limit: Number(opts.limit),
+				});
+			});
+			console.log(JSON.stringify(result, null, 2));
+		} catch (err) {
+			console.error("Network log failed:", err);
+			process.exitCode = 1;
+		}
+	});
+
 /**
  * Helper: launch Electron in headless mode, run an action, then quit.
  */

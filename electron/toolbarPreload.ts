@@ -14,10 +14,20 @@ contextBridge.exposeInMainWorld("webctxToolbar", {
 	clearSelection: () => ipcRenderer.invoke("clear-selection"),
 	screenshot: (options: Record<string, unknown>) => ipcRenderer.invoke("screenshot", options),
 	getContext: () => ipcRenderer.invoke("get-context"),
-	onUrlChanged: (callback: (url: string) => void) => {
-		ipcRenderer.on("url-changed", (_event: unknown, url: string) => callback(url));
+	saveFavorites: (favs: unknown[]) => ipcRenderer.invoke("save-favorites", favs),
+	loadFavorites: () => ipcRenderer.invoke("load-favorites"),
+	setFavBarHeight: (height: number) => ipcRenderer.invoke("set-favbar-height", height),
+	openDevTools: () => ipcRenderer.invoke("open-devtools"),
+	toggleTerminal: () => ipcRenderer.invoke("toggle-terminal"),
+	onUrlChanged: (callback: (url: string, title: string) => void) => {
+		ipcRenderer.on("url-changed", (_event: unknown, url: string, title: string) =>
+			callback(url, title),
+		);
 	},
-	onSelectionUpdated: (callback: (ctx: unknown) => void) => {
-		ipcRenderer.on("selection-updated", (_event: unknown, ctx: unknown) => callback(ctx));
+	onDevToolsToggled: (callback: (active: boolean) => void) => {
+		ipcRenderer.on("devtools-toggled", (_event: unknown, active: boolean) => callback(active));
+	},
+	onTerminalToggled: (callback: (active: boolean) => void) => {
+		ipcRenderer.on("terminal-toggled", (_event: unknown, active: boolean) => callback(active));
 	},
 });

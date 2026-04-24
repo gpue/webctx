@@ -21,6 +21,10 @@ declare global {
 	interface Window {
 		__webctxPickerActive?: boolean;
 		__webctxPickerCleanup?: () => void;
+		__webctxPickerDeselect?: (selector: string) => void;
+		__webctxPickerClearAll?: () => void;
+		__webctxPickerHide?: () => void;
+		__webctxPickerShow?: () => void;
 		__webctx?: WebctxBridge;
 	}
 }
@@ -144,6 +148,243 @@ declare global {
 		return `/${parts.join("/")}`;
 	}
 
+	// ── Framework metadata extraction ─────────────────────────────────
+
+	interface SourceLoc {
+		fileName: string;
+		lineNumber: number;
+		columnNumber?: number;
+	}
+
+	interface FrameworkMeta {
+		framework: "react" | "vue" | "svelte" | "unknown";
+		componentName?: string;
+		componentChain?: string[];
+		sourceLocation?: SourceLoc;
+		props?: Record<string, unknown>;
+	}
+
+	/** Get a React fiber from a DOM node (React 16+). */
+	function getReactFiber(node: Element): Record<string, unknown> | null {
+		for (const key of Object.keys(node)) {
+			if (key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")) {
+				return (node as unknown as Record<string, Record<string, unknown>>)[key] ?? null;
+			}
+		}
+		return null;
+	}
+
+	/** Extract a component name from a React fiber type. */
+	function getReactComponentName(type: unknown): string | undefined {
+		if (typeof type === "function") {
+			const fn = type as { displayName?: string; name?: string };
+			const name = fn.displayName || fn.name;
+			return name && !name.startsWith("_") ? name : undefined;
+		}
+		// ForwardRef wraps in an object with render function
+		if (type && typeof type === "object") {
+			const render = (type as Record<string, unknown>).render;
+			if (typeof render === "function") {
+				const fn = render as { displayName?: string; name?: string };
+				return fn.displayName || fn.name || undefined;
+			}
+		}
+		return undefined;
+	}
+
+	/** Extract _debugSource from a fiber node. */
+	function getReactDebugSource(fiber: Record<string, unknown>): SourceLoc | undefined {
+		const ds = fiber._debugSource;
+		if (!ds || typeof ds !== "object") return undefined;
+		const src = ds as Record<string, unknown>;
+		if (typeof src.fileName !== "string" || typeof src.lineNumber !== "number") return undefined;
+		return {
+			fileName: src.fileName as string,
+			lineNumber: src.lineNumber as number,
+			columnNumber: typeof src.columnNumber === "number" ? (src.columnNumber as number) : undefined,
+		};
+	}
+
+	interface FiberWalkResult {
+		chain: string[];
+		sourceLocation?: SourceLoc;
+		componentName?: string;
+		props?: Record<string, unknown>;
+	}
+
+	/** Process a single React fiber node for component info. */
+	function processReactFiber(fiber: Record<string, unknown>, result: FiberWalkResult): void {
+		const name = getReactComponentName(fiber.type);
+		if (name) {
+			result.chain.push(name);
+			if (!result.componentName) {
+				result.componentName = name;
+				result.props = extractPropsFromNode(fiber, "memoizedProps");
+			}
+		}
+		if (!result.sourceLocation) {
+			result.sourceLocation = getReactDebugSource(fiber);
+		}
+	}
+
+	/** Walk React fiber tree upward to collect component names and source. */
+	function extractReactMeta(node: Element): FrameworkMeta | null {
+		const fiber = getReactFiber(node);
+		if (!fiber) return null;
+
+		const result: FiberWalkResult = { chain: [] };
+		let current: Record<string, unknown> | null = fiber;
+		while (current) {
+			processReactFiber(current, result);
+			current = (current.return as Record<string, unknown>) ?? null;
+		}
+
+		if (!result.componentName && result.chain.length === 0) return null;
+		return {
+			framework: "react",
+			componentName: result.componentName,
+			componentChain: result.chain.length > 0 ? result.chain : undefined,
+			sourceLocation: result.sourceLocation,
+			props: result.props,
+		};
+	}
+
+	/** Extract Vue component name and file from a component options object. */
+	function getVueComponentInfo(opts: Record<string, unknown>): {
+		name?: string;
+		file?: string;
+	} {
+		const name =
+			(opts.name as string | undefined) ??
+			(opts.__name as string | undefined) ??
+			(opts.displayName as string | undefined);
+		const file = typeof opts.__file === "string" ? (opts.__file as string) : undefined;
+		return { name, file };
+	}
+
+	/** Extract serializable props from a component node if available. */
+	function extractPropsFromNode(
+		node: Record<string, unknown>,
+		key: string,
+	): Record<string, unknown> | undefined {
+		const p = node[key];
+		if (p && typeof p === "object") {
+			return serializeProps(p as Record<string, unknown>);
+		}
+		return undefined;
+	}
+
+	/** Process a single Vue component instance node. */
+	function processVueNode(node: Record<string, unknown>, result: FiberWalkResult): void {
+		const type = node.type ?? node.$options;
+		if (!type || typeof type !== "object") return;
+		const info = getVueComponentInfo(type as Record<string, unknown>);
+		if (info.name) {
+			result.chain.push(info.name);
+			if (!result.componentName) {
+				result.componentName = info.name;
+				result.props = extractPropsFromNode(node, "props");
+			}
+		}
+		if (!result.sourceLocation && info.file) {
+			result.sourceLocation = { fileName: info.file, lineNumber: 1 };
+		}
+	}
+
+	/** Get Vue component instance from a DOM node. */
+	function extractVueMeta(node: Element): FrameworkMeta | null {
+		const vueInstance =
+			(node as unknown as Record<string, unknown>).__vueParentComponent ??
+			(node as unknown as Record<string, unknown>).__vue__;
+		if (!vueInstance) return null;
+
+		const result: FiberWalkResult = { chain: [] };
+		let current: Record<string, unknown> | null = vueInstance as Record<string, unknown>;
+		while (current) {
+			processVueNode(current, result);
+			current = (current.parent ?? current.$parent ?? null) as Record<string, unknown> | null;
+		}
+
+		if (!result.componentName && result.chain.length === 0) return null;
+		return {
+			framework: "vue",
+			componentName: result.componentName,
+			componentChain: result.chain.length > 0 ? result.chain : undefined,
+			sourceLocation: result.sourceLocation,
+			props: result.props,
+		};
+	}
+
+	/** Get Svelte component metadata from a DOM node. */
+	function extractSvelteMeta(node: Element): FrameworkMeta | null {
+		// Svelte 4+: __svelte_meta
+		const meta = (node as unknown as Record<string, unknown>).__svelte_meta;
+		if (!meta) {
+			// Svelte 5 / older: walk up to find __svelte_meta on ancestors
+			let parent: Element | null = node.parentElement;
+			while (parent) {
+				const m = (parent as unknown as Record<string, unknown>).__svelte_meta;
+				if (m) {
+					return parseSvelteMeta(m as Record<string, unknown>);
+				}
+				parent = parent.parentElement;
+			}
+			return null;
+		}
+		return parseSvelteMeta(meta as Record<string, unknown>);
+	}
+
+	function parseSvelteMeta(meta: Record<string, unknown>): FrameworkMeta | null {
+		const loc = meta.loc as Record<string, unknown> | undefined;
+		let sourceLocation: SourceLoc | undefined;
+		if (loc && typeof loc.file === "string") {
+			sourceLocation = {
+				fileName: loc.file as string,
+				lineNumber: typeof loc.line === "number" ? (loc.line as number) : 1,
+				columnNumber: typeof loc.column === "number" ? (loc.column as number) : undefined,
+			};
+		}
+		return {
+			framework: "svelte",
+			sourceLocation,
+		};
+	}
+
+	/** Check if a value is JSON-serializable for props extraction. */
+	function isSerializablePrimitive(val: unknown): boolean {
+		return (
+			val === null ||
+			val === undefined ||
+			typeof val === "string" ||
+			typeof val === "number" ||
+			typeof val === "boolean"
+		);
+	}
+
+	/** Check if an array contains only serializable primitives. */
+	function isSerializableArray(val: unknown[]): boolean {
+		return val.length <= 10 && val.every((v) => typeof v !== "function" && typeof v !== "object");
+	}
+
+	/** Serialize props, keeping only JSON-safe values. */
+	function serializeProps(raw: Record<string, unknown>): Record<string, unknown> {
+		const result: Record<string, unknown> = {};
+		for (const [key, val] of Object.entries(raw)) {
+			if (key === "children" || key === "ref" || key.startsWith("__")) continue;
+			if (isSerializablePrimitive(val)) {
+				result[key] = val;
+			} else if (Array.isArray(val) && isSerializableArray(val)) {
+				result[key] = val;
+			}
+		}
+		return result;
+	}
+
+	/** Try all frameworks and return the first match. */
+	function extractFrameworkMeta(node: Element): FrameworkMeta | null {
+		return extractReactMeta(node) ?? extractVueMeta(node) ?? extractSvelteMeta(node) ?? null;
+	}
+
 	// ── Build context for an element ───────────────────────────────────
 
 	function buildContext(el: Element) {
@@ -152,6 +393,9 @@ declare global {
 		for (const attr of el.attributes) {
 			attrs[attr.name] = attr.value;
 		}
+
+		const meta = extractFrameworkMeta(el);
+
 		return {
 			cssSelector: generateSelector(el),
 			xpath: generateXPathForElement(el),
@@ -165,6 +409,15 @@ declare global {
 				height: Math.round(rect.height),
 			},
 			htmlSnippet: el.outerHTML.slice(0, 2000),
+			sourceLocation: meta?.sourceLocation,
+			componentChain: meta?.componentChain,
+			frameworkInfo: meta
+				? {
+						framework: meta.framework,
+						componentName: meta.componentName,
+						props: meta.props,
+					}
+				: undefined,
 		};
 	}
 
@@ -288,21 +541,13 @@ declare global {
 		const ctx = buildContext(target);
 		const selector = ctx.cssSelector;
 
-		if (e.shiftKey && selectedSelectors.has(selector)) {
-			// Deselect
+		if (selectedSelectors.has(selector)) {
+			// Shift+click or re-click to deselect
 			selectedSelectors.delete(selector);
 			removeSelectedOverlay(selector);
 			window.__webctx?.elementDeselected(selector);
 		} else {
-			// Select (shift = add, no shift = replace)
-			if (!e.shiftKey) {
-				for (const sel of selectedSelectors) {
-					removeSelectedOverlay(sel);
-					window.__webctx?.elementDeselected(sel);
-				}
-				selectedSelectors.clear();
-			}
-
+			// Click always adds to selection
 			selectedSelectors.add(selector);
 			addSelectedOverlay(selector, target.getBoundingClientRect());
 			window.__webctx?.elementSelected(ctx);
@@ -315,11 +560,17 @@ declare global {
 		}
 	}
 
+	function onMouseLeave(): void {
+		hoverOverlay.style.display = "none";
+		tooltip.style.display = "none";
+	}
+
 	// ── Setup ──────────────────────────────────────────────────────────
 
 	document.addEventListener("mousemove", onMouseMove, true);
 	document.addEventListener("click", onClick, true);
 	document.addEventListener("keydown", onKeyDown, true);
+	document.documentElement.addEventListener("mouseleave", onMouseLeave);
 	window.addEventListener("scroll", updateOverlayPositions, true);
 	window.addEventListener("resize", updateOverlayPositions, true);
 
@@ -328,6 +579,7 @@ declare global {
 		document.removeEventListener("mousemove", onMouseMove, true);
 		document.removeEventListener("click", onClick, true);
 		document.removeEventListener("keydown", onKeyDown, true);
+		document.documentElement.removeEventListener("mouseleave", onMouseLeave);
 		window.removeEventListener("scroll", updateOverlayPositions, true);
 		window.removeEventListener("resize", updateOverlayPositions, true);
 		hoverOverlay.remove();
@@ -338,4 +590,36 @@ declare global {
 	}
 
 	window.__webctxPickerCleanup = cleanup;
+
+	/** Allow external code (main process) to deselect an element by selector. */
+	window.__webctxPickerDeselect = (selector: string) => {
+		if (selectedSelectors.has(selector)) {
+			selectedSelectors.delete(selector);
+			removeSelectedOverlay(selector);
+		}
+	};
+
+	/** Allow external code to clear all selections without disabling the picker. */
+	window.__webctxPickerClearAll = () => {
+		for (const sel of selectedSelectors) {
+			removeSelectedOverlay(sel);
+		}
+		selectedSelectors.clear();
+	};
+
+	/** Temporarily hide all picker overlays (for clean screenshots). */
+	window.__webctxPickerHide = () => {
+		hoverOverlay.style.display = "none";
+		tooltip.style.display = "none";
+		for (const overlay of selectedOverlays.values()) {
+			overlay.style.display = "none";
+		}
+	};
+
+	/** Restore picker overlays after hiding. */
+	window.__webctxPickerShow = () => {
+		for (const overlay of selectedOverlays.values()) {
+			overlay.style.display = "block";
+		}
+	};
 })();

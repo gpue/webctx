@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:">
+  <title>Terminal</title>
+  <link rel="stylesheet" href="xterm.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1e1e2e;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid #313244;
+    }
+    #terminal-container {
+      flex: 1;
+      padding: 4px;
+      overflow: hidden;
+    }
+    .resize-handle {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 5px;
+      height: 100%;
+      cursor: col-resize;
+      z-index: 100;
+      background: transparent;
+      transition: background 0.15s;
+    }
+    .resize-handle:hover,
+    .resize-handle.active {
+      background: #89b4fa;
+    }
+  </style>
+</head>
+<body>
+  <div class="resize-handle" id="resize-handle"></div>
+  <div id="terminal-container"></div>
+
+  <script src="xterm.js"></script>
+  <script src="addon-fit.js"></script>
+  <script>
+    /* global Terminal, FitAddon */
+    let terminal = null;
+    let fitAddon = null;
+
+    function init() {
+      fitAddon = new FitAddon.FitAddon();
+      terminal = new Terminal({
+        cursorBlink: true,
+        fontSize: 13,
+        fontFamily: "'SF Mono', Monaco, 'Cascadia Code', 'Fira Code', Consolas, monospace",
+        lineHeight: 1.2,
+        theme: {
+          background: '#1e1e2e',
+          foreground: '#cdd6f4',
+          cursor: '#f5e0dc',
+          selectionBackground: '#45475a',
+          selectionForeground: '#cdd6f4',
+          black: '#45475a',
+          red: '#f38ba8',
+          green: '#a6e3a1',
+          yellow: '#f9e2af',
+          blue: '#89b4fa',
+          magenta: '#f5c2e7',
+          cyan: '#94e2d5',
+          white: '#bac2de',
+          brightBlack: '#585b70',
+          brightRed: '#f38ba8',
+          brightGreen: '#a6e3a1',
+          brightYellow: '#f9e2af',
+          brightBlue: '#89b4fa',
+          brightMagenta: '#f5c2e7',
+          brightCyan: '#94e2d5',
+          brightWhite: '#a6adc8',
+        },
+      });
+
+      terminal.loadAddon(fitAddon);
+      terminal.open(document.getElementById('terminal-container'));
+      fitAddon.fit();
+
+      // Send keystrokes to PTY
+      terminal.onData((data) => {
+        window.webctxTerminal.input(data);
+      });
+
+      // Receive PTY output
+      window.webctxTerminal.onData((data) => {
+        terminal.write(data);
+      });
+
+      // Fit on resize
+      const ro = new ResizeObserver(() => {
+        if (fitAddon && terminal) {
+          fitAddon.fit();
+          window.webctxTerminal.resize(terminal.cols, terminal.rows);
+        }
+      });
+      ro.observe(document.getElementById('terminal-container'));
+
+      // Tell main process we're ready
+      window.webctxTerminal.ready(terminal.cols, terminal.rows);
+    }
+
+    init();
+
+    // Resize handle for left panel width
+    const resizeHandle = document.getElementById('resize-handle');
+    resizeHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      resizeHandle.classList.add('active');
+      window.webctxTerminal.resizeStart();
+      const onMouseUp = () => {
+        resizeHandle.classList.remove('active');
+        window.webctxTerminal.resizeEnd();
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+      document.addEventListener('mouseup', onMouseUp);
+    });
+  </script>
+</body>
+</html>

@@ -37,6 +37,54 @@ function createMockBackend(): BrowserBackend {
 		]),
 		enablePicker: vi.fn(async () => {}),
 		disablePicker: vi.fn(async () => {}),
+		getConsoleLogs: vi.fn(async (options?: { level?: string; limit?: number; clear?: boolean }) => {
+			const logs = [
+				{ level: "log", message: "Hello", source: "app.js", line: 1, timestamp: 1000 },
+				{ level: "error", message: "Oops", source: "app.js", line: 5, timestamp: 2000 },
+				{ level: "warn", message: "Hmm", source: "lib.js", line: 10, timestamp: 3000 },
+			];
+			let result = [...logs];
+			if (options?.level) {
+				result = result.filter((e) => e.level === options.level);
+			}
+			if (options?.limit && options.limit > 0) {
+				result = result.slice(-options.limit);
+			}
+			return result;
+		}),
+		getNetworkLog: vi.fn(async (options?: { limit?: number; filter?: string; clear?: boolean }) => {
+			const entries = [
+				{
+					url: "https://example.com/api",
+					method: "GET",
+					status: 200,
+					mimeType: "application/json",
+					size: 1024,
+					duration: 150,
+					timestamp: 1000,
+				},
+				{
+					url: "https://example.com/style.css",
+					method: "GET",
+					status: 200,
+					mimeType: "text/css",
+					size: 2048,
+					duration: 50,
+					timestamp: 1100,
+				},
+			];
+			let result = [...entries];
+			if (options?.filter) {
+				const p = options.filter.toLowerCase();
+				result = result.filter(
+					(e) => e.url.toLowerCase().includes(p) || e.mimeType.toLowerCase().includes(p),
+				);
+			}
+			if (options?.limit && options.limit > 0) {
+				result = result.slice(-options.limit);
+			}
+			return result;
+		}),
 	};
 }
 
@@ -97,5 +145,39 @@ describe("createMcpServer", () => {
 		expect(backend.enablePicker).toHaveBeenCalled();
 		await backend.disablePicker();
 		expect(backend.disablePicker).toHaveBeenCalled();
+	});
+
+	it("backend.getConsoleLogs returns all entries", async () => {
+		const logs = await backend.getConsoleLogs();
+		expect(logs).toHaveLength(3);
+		expect(logs[0]).toHaveProperty("level", "log");
+	});
+
+	it("backend.getConsoleLogs filters by level", async () => {
+		const logs = await backend.getConsoleLogs({ level: "error" });
+		expect(logs).toHaveLength(1);
+		expect(logs[0]).toHaveProperty("message", "Oops");
+	});
+
+	it("backend.getConsoleLogs respects limit", async () => {
+		const logs = await backend.getConsoleLogs({ limit: 2 });
+		expect(logs).toHaveLength(2);
+	});
+
+	it("backend.getNetworkLog returns all entries", async () => {
+		const entries = await backend.getNetworkLog();
+		expect(entries).toHaveLength(2);
+		expect(entries[0]).toHaveProperty("url", "https://example.com/api");
+	});
+
+	it("backend.getNetworkLog filters by URL", async () => {
+		const entries = await backend.getNetworkLog({ filter: "style" });
+		expect(entries).toHaveLength(1);
+		expect(entries[0]).toHaveProperty("mimeType", "text/css");
+	});
+
+	it("backend.getNetworkLog respects limit", async () => {
+		const entries = await backend.getNetworkLog({ limit: 1 });
+		expect(entries).toHaveLength(1);
 	});
 });
