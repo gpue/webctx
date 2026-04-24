@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>webctx</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      height: 52px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      height: 52px;
+    }
+    .toolbar button {
+      -webkit-app-region: no-drag;
+      background: #313244;
+      border: 1px solid #45475a;
+      color: #cdd6f4;
+      border-radius: 6px;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: background 0.15s;
+    }
+    .toolbar button:hover { background: #45475a; }
+    .toolbar button:active { background: #585b70; }
+    .toolbar button.active { background: #89b4fa; color: #1e1e2e; }
+    .url-bar {
+      -webkit-app-region: no-drag;
+      flex: 1;
+      height: 32px;
+      background: #313244;
+      border: 1px solid #45475a;
+      border-radius: 6px;
+      color: #cdd6f4;
+      padding: 0 12px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .url-bar:focus { border-color: #89b4fa; }
+    .selection-badge {
+      background: #a6e3a1;
+      color: #1e1e2e;
+      border-radius: 10px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      min-width: 20px;
+      text-align: center;
+      display: none;
+    }
+    .selection-badge.visible { display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="btn-back" title="Back">&#9664;</button>
+    <button id="btn-forward" title="Forward">&#9654;</button>
+    <button id="btn-reload" title="Reload">&#8635;</button>
+    <input type="text" class="url-bar" id="url-bar" placeholder="Enter URL..." spellcheck="false">
+    <button id="btn-picker" title="Toggle element picker">&#9783;</button>
+    <span class="selection-badge" id="selection-badge">0</span>
+    <button id="btn-clear" title="Clear selection">&#10005;</button>
+    <button id="btn-screenshot" title="Screenshot">&#9745;</button>
+  </div>
+
+  <script>
+    const urlBar = document.getElementById('url-bar');
+    const btnBack = document.getElementById('btn-back');
+    const btnForward = document.getElementById('btn-forward');
+    const btnReload = document.getElementById('btn-reload');
+    const btnPicker = document.getElementById('btn-picker');
+    const btnClear = document.getElementById('btn-clear');
+    const btnScreenshot = document.getElementById('btn-screenshot');
+    const badge = document.getElementById('selection-badge');
+
+    urlBar.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        window.webctxToolbar.navigate(urlBar.value);
+      }
+    });
+
+    btnBack.addEventListener('click', () => window.webctxToolbar.goBack());
+    btnForward.addEventListener('click', () => window.webctxToolbar.goForward());
+    btnReload.addEventListener('click', () => window.webctxToolbar.reload());
+    btnClear.addEventListener('click', () => window.webctxToolbar.clearSelection());
+    btnScreenshot.addEventListener('click', () => window.webctxToolbar.screenshot({}));
+
+    btnPicker.addEventListener('click', async () => {
+      const active = await window.webctxToolbar.togglePicker();
+      btnPicker.classList.toggle('active', active);
+    });
+
+    // Listen for URL changes from main process
+    window.webctxToolbar.onUrlChanged((url) => {
+      urlBar.value = url;
+    });
+
+    // Listen for selection updates
+    window.webctxToolbar.onSelectionUpdated((ctx) => {
+      const count = ctx.selectedElements.length;
+      badge.textContent = count;
+      badge.classList.toggle('visible', count > 0);
+    });
+  </script>
+</body>
+</html>

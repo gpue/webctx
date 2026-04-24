@@ -1,3 +1,4 @@
+export { createElectronBackend } from "./backend.js";
 export { captureScreenshot } from "./screenshot.js";
 export { extractBoundingBox, generateCssSelector, generateXPath } from "./selector.js";
 export { StateManager } from "./state.js";

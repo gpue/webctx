@@ -9,7 +9,7 @@
 	},
 	"scripts": {
 		"dev": "electron .",
-		"build": "tsup",
+		"build": "tsup && cp electron/toolbar.html dist/electron/toolbar.html",
 		"start": "electron dist/electron/main.js",
 		"serve": "node dist/mcp/server.js",
 		"test": "vitest run",
