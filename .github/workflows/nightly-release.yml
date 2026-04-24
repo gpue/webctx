@@ -1,0 +1,113 @@
+name: Nightly Patch Release
+
+on:
+  schedule:
+    # Every day at 03:00 UTC
+    - cron: "0 3 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  nightly-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for changes since last tag
+        id: changes
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "No previous tag found — first release"
+          else
+            COMMIT_COUNT=$(git rev-list "$LAST_TAG"..HEAD --count)
+            if [ "$COMMIT_COUNT" -gt 0 ]; then
+              echo "has_changes=true" >> "$GITHUB_OUTPUT"
+              echo "$COMMIT_COUNT commits since $LAST_TAG"
+            else
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+              echo "No changes since $LAST_TAG — skipping release"
+            fi
+          fi
+
+      - name: Setup Node.js
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.changes.outputs.has_changes == 'true'
+        run: npm ci
+
+      - name: Quality checks
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+
+      - name: Build
+        if: steps.changes.outputs.has_changes == 'true'
+        run: npm run build
+
+      - name: Bump patch version
+        if: steps.changes.outputs.has_changes == 'true'
+        id: version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+          DATE=$(date -u +%Y%m%d)
+          TAG="${NEW_VERSION}-nightly.${DATE}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          git add package.json package-lock.json
+          git commit -m "chore: bump to $TAG [skip ci]"
+          git tag "$TAG"
+          git push origin HEAD "$TAG"
+
+      - name: Generate release notes
+        if: steps.changes.outputs.has_changes == 'true'
+        id: notes
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${LAST_TAG}..HEAD"
+          fi
+
+          {
+            echo "body<<RELEASE_EOF"
+            echo "## Nightly build $(date -u +%Y-%m-%d)"
+            echo ""
+            echo "### Changes"
+            git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges | grep -v "\[skip ci\]" || echo "- Maintenance updates"
+            echo ""
+            echo ""
+            echo "---"
+            echo "*Automated nightly release. Use at your own risk.*"
+            echo "RELEASE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "${{ steps.version.outputs.tag }}"
+          body: ${{ steps.notes.outputs.body }}
+          prerelease: true
