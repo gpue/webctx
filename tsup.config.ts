@@ -34,7 +34,7 @@ export default defineConfig([
 		sourcemap: true,
 		splitting: false,
 		external: ["electron"],
-		outExtension: () => ({ js: ".js" }),
+		outExtension: () => ({ js: ".cjs" }),
 	},
 	// Picker bundle (IIFE for injection into web pages)
 	{

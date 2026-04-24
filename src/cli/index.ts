@@ -31,7 +31,7 @@ program
 			// Electron must be spawned as a child process when called from Node CLI
 			const { spawn } = await import("node:child_process");
 			const electronPath = path.resolve(import.meta.dirname, "../node_modules/.bin/electron");
-			const mainPath = path.resolve(import.meta.dirname, "../electron/main.js");
+			const mainPath = path.resolve(import.meta.dirname, "../electron/main.cjs");
 			const child = spawn(electronPath, [mainPath, url], {
 				stdio: "inherit",
 				env: { ...process.env },

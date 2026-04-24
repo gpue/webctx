@@ -3,14 +3,14 @@
 	"version": "0.1.0",
 	"description": "Browser-based element selection, click automation, and screenshotting tool for agentic web app improvement",
 	"type": "module",
-	"main": "dist/electron/main.js",
+	"main": "dist/electron/main.cjs",
 	"bin": {
 		"webctx": "dist/cli/index.js"
 	},
 	"scripts": {
 		"dev": "electron .",
 		"build": "tsup && cp electron/toolbar.html dist/electron/toolbar.html",
-		"start": "electron dist/electron/main.js",
+		"start": "electron dist/electron/main.cjs",
 		"serve": "node dist/mcp/server.js",
 		"test": "vitest run",
 		"test:watch": "vitest",

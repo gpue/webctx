@@ -58,7 +58,7 @@ export async function launchApp(url?: string, headless = false): Promise<void> {
 		height: 900,
 		show: !headless,
 		webPreferences: {
-			preload: path.join(currentDir, "toolbarPreload.js"),
+			preload: path.join(currentDir, "toolbarPreload.cjs"),
 			contextIsolation: true,
 			nodeIntegration: false,
 		},
@@ -70,7 +70,7 @@ export async function launchApp(url?: string, headless = false): Promise<void> {
 	// Create the BrowserView for the target page
 	targetView = new BView({
 		webPreferences: {
-			preload: path.join(currentDir, "viewPreload.js"),
+			preload: path.join(currentDir, "viewPreload.cjs"),
 			contextIsolation: true,
 			nodeIntegration: false,
 		},

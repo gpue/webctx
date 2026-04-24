@@ -8,7 +8,7 @@ import { _electron as electron, expect, test } from "@playwright/test";
  * Prerequisites: `npm run build` must have been run first.
  */
 
-const appPath = path.resolve(import.meta.dirname, "../../dist/electron/main.js");
+const appPath = path.resolve(import.meta.dirname, "../../dist/electron/main.cjs");
 const fixturesDir = path.resolve(import.meta.dirname, "../fixtures");
 
 test.describe("webctx Electron app", () => {
