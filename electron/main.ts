@@ -121,16 +121,49 @@ function syncPageState(): void {
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 
+/** Determine if input looks like a URL or a search query. */
+function resolveInput(input: string): string {
+	const trimmed = input.trim();
+
+	// Already has a scheme
+	if (/^https?:\/\//i.test(trimmed)) {
+		return trimmed;
+	}
+	if (/^file:\/\//i.test(trimmed)) {
+		return trimmed;
+	}
+
+	// Looks like a domain: has a dot, no spaces, and a valid TLD-like suffix
+	if (/^[^\s]+\.[a-z]{2,}(\/.*)?$/i.test(trimmed)) {
+		return `https://${trimmed}`;
+	}
+
+	// localhost or localhost:port
+	if (/^localhost(:\d+)?(\/.*)?$/i.test(trimmed)) {
+		return `http://${trimmed}`;
+	}
+
+	// IP address (v4)
+	if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?(\/.*)?$/.test(trimmed)) {
+		return `http://${trimmed}`;
+	}
+
+	// Otherwise treat as a Google search
+	return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
+}
+
 export async function navigateTo(url: string): Promise<void> {
 	if (!targetView) throw new Error("No target view available");
 
-	// Normalize URL
-	let normalizedUrl = url;
-	if (!/^https?:\/\//i.test(normalizedUrl)) {
-		normalizedUrl = `https://${normalizedUrl}`;
-	}
+	const resolvedUrl = resolveInput(url);
 
-	await targetView.webContents.loadURL(normalizedUrl);
+	try {
+		await targetView.webContents.loadURL(resolvedUrl);
+	} catch {
+		// If the URL fails to load (DNS error, etc.), fall back to Google search
+		const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(url.trim())}`;
+		await targetView.webContents.loadURL(searchUrl);
+	}
 	syncPageState();
 
 	// Re-inject picker if it was active

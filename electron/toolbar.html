@@ -13,7 +13,6 @@
       height: 52px;
       overflow: hidden;
       user-select: none;
-      -webkit-app-region: drag;
     }
     .toolbar {
       display: flex;
@@ -21,9 +20,12 @@
       gap: 6px;
       padding: 8px 12px;
       height: 52px;
+      -webkit-app-region: drag;
+    }
+    .toolbar button, .toolbar input, .toolbar .app-icon, .toolbar .selection-badge {
+      -webkit-app-region: no-drag;
     }
     .toolbar button {
-      -webkit-app-region: no-drag;
       background: #313244;
       border: 1px solid #45475a;
       color: #cdd6f4;
@@ -37,12 +39,12 @@
       font-size: 14px;
       transition: background 0.15s;
       position: relative;
+      flex-shrink: 0;
     }
     .toolbar button:hover { background: #45475a; }
     .toolbar button:active { background: #585b70; }
     .toolbar button.active { background: #89b4fa; color: #1e1e2e; }
     .url-bar {
-      -webkit-app-region: no-drag;
       flex: 1;
       height: 32px;
       background: #313244;
@@ -55,6 +57,12 @@
       transition: border-color 0.15s;
     }
     .url-bar:focus { border-color: #89b4fa; }
+    #btn-go {
+      width: 40px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
     .selection-badge {
       background: #a6e3a1;
       color: #1e1e2e;
@@ -68,7 +76,6 @@
     }
     .selection-badge.visible { display: inline-block; }
     .app-icon {
-      -webkit-app-region: no-drag;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -76,18 +83,13 @@
       height: 28px;
       flex-shrink: 0;
     }
-    .app-icon svg {
-      width: 22px;
-      height: 22px;
-    }
-    /* Tooltip styling */
-    [data-tooltip] {
-      position: relative;
-    }
+    .app-icon svg { width: 22px; height: 22px; }
+    /* Tooltips — shown ABOVE controls so BrowserView doesn't cover them */
+    [data-tooltip] { position: relative; }
     [data-tooltip]::after {
       content: attr(data-tooltip);
       position: absolute;
-      bottom: -28px;
+      top: -30px;
       left: 50%;
       transform: translateX(-50%);
       background: #11111b;
@@ -102,9 +104,8 @@
       z-index: 100;
       border: 1px solid #45475a;
     }
-    [data-tooltip]:hover::after {
-      opacity: 1;
-    }
+    [data-tooltip]:hover::after { opacity: 1; }
+    .url-bar[data-tooltip]::after { top: -26px; }
   </style>
 </head>
 <body>
@@ -117,53 +118,52 @@
         <path d="M16 12l-4 4"/>
       </svg>
     </span>
-    <button id="btn-back" data-tooltip="Back (Alt+Left)">&#9664;</button>
-    <button id="btn-forward" data-tooltip="Forward (Alt+Right)">&#9654;</button>
-    <button id="btn-reload" data-tooltip="Reload (Ctrl+R)">&#8635;</button>
-    <input type="text" class="url-bar" id="url-bar" placeholder="Enter URL and press Enter..." spellcheck="false" data-tooltip="Navigate to URL">
-    <button id="btn-picker" data-tooltip="Toggle element picker (Ctrl+Shift+P)">&#9783;</button>
+    <button id="btn-back" data-tooltip="Back">&#9664;</button>
+    <button id="btn-forward" data-tooltip="Forward">&#9654;</button>
+    <button id="btn-reload" data-tooltip="Reload">&#8635;</button>
+    <input type="text" class="url-bar" id="url-bar" placeholder="Enter URL or search..." spellcheck="false" data-tooltip="URL or search query">
+    <button id="btn-go" data-tooltip="Navigate">Go</button>
+    <button id="btn-picker" data-tooltip="Element picker">&#9783;</button>
     <span class="selection-badge" id="selection-badge" data-tooltip="Selected elements">0</span>
-    <button id="btn-clear" data-tooltip="Clear all selections">&#10005;</button>
-    <button id="btn-screenshot" data-tooltip="Take screenshot (Ctrl+Shift+S)">&#9745;</button>
+    <button id="btn-clear" data-tooltip="Clear selection">&#10005;</button>
+    <button id="btn-screenshot" data-tooltip="Screenshot">&#9745;</button>
   </div>
 
   <script>
     const urlBar = document.getElementById('url-bar');
-    const btnBack = document.getElementById('btn-back');
-    const btnForward = document.getElementById('btn-forward');
-    const btnReload = document.getElementById('btn-reload');
     const btnPicker = document.getElementById('btn-picker');
-    const btnClear = document.getElementById('btn-clear');
-    const btnScreenshot = document.getElementById('btn-screenshot');
     const badge = document.getElementById('selection-badge');
 
+    function doNavigate() {
+      const val = urlBar.value.trim();
+      if (val) {
+        urlBar.blur();
+        window.webctxToolbar.navigate(val);
+      }
+    }
+
+    // Both keydown and keyup for maximum compatibility with Electron drag regions
     urlBar.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        const val = urlBar.value.trim();
-        if (val) {
-          window.webctxToolbar.navigate(val);
-        }
+        e.stopPropagation();
+        doNavigate();
       }
     });
 
-    btnBack.addEventListener('click', () => window.webctxToolbar.goBack());
-    btnForward.addEventListener('click', () => window.webctxToolbar.goForward());
-    btnReload.addEventListener('click', () => window.webctxToolbar.reload());
-    btnClear.addEventListener('click', () => window.webctxToolbar.clearSelection());
-    btnScreenshot.addEventListener('click', () => window.webctxToolbar.screenshot({}));
+    document.getElementById('btn-go').addEventListener('click', doNavigate);
+    document.getElementById('btn-back').addEventListener('click', () => window.webctxToolbar.goBack());
+    document.getElementById('btn-forward').addEventListener('click', () => window.webctxToolbar.goForward());
+    document.getElementById('btn-reload').addEventListener('click', () => window.webctxToolbar.reload());
+    document.getElementById('btn-clear').addEventListener('click', () => window.webctxToolbar.clearSelection());
+    document.getElementById('btn-screenshot').addEventListener('click', () => window.webctxToolbar.screenshot({}));
 
     btnPicker.addEventListener('click', async () => {
       const active = await window.webctxToolbar.togglePicker();
       btnPicker.classList.toggle('active', active);
     });
 
-    // Listen for URL changes from main process
-    window.webctxToolbar.onUrlChanged((url) => {
-      urlBar.value = url;
-    });
-
-    // Listen for selection updates
+    window.webctxToolbar.onUrlChanged((url) => { urlBar.value = url; });
     window.webctxToolbar.onSelectionUpdated((ctx) => {
       const count = ctx.selectedElements.length;
       badge.textContent = count;
