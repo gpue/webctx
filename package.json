@@ -1,6 +1,6 @@
 {
 	"name": "webctx",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Browser-based element selection, click automation, and screenshotting tool for agentic web app improvement",
 	"type": "module",
 	"main": "dist/electron/main.cjs",
